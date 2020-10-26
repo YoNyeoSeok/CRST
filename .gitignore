@@ -142,3 +142,6 @@ cython_debug/
 
 # src_model
 src_model
+
+# log files
+results
