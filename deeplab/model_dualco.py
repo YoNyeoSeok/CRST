@@ -156,10 +156,10 @@ class Residual_Refinement_Module(nn.Module):
         return [seg1, seg1+seg2]
 
 
-class ResNet_Refine(nn.Module):
+class ResNet4_Refine(nn.Module):
     def __init__(self, block, layers, num_classes):
         self.inplanes = 64
-        super(ResNet_Refine, self).__init__()
+        super(ResNet4_Refine, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
         self.bn1 = nn.BatchNorm2d(64, affine=affine_par)
@@ -227,10 +227,10 @@ class ResNet_Refine(nn.Module):
         return x
 
 
-class ResNet(nn.Module):
+class ResNet4(nn.Module):
     def __init__(self, block, layers, num_classes):
         self.inplanes = 64
-        super(ResNet, self).__init__()
+        super(ResNet4, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
         self.bn1 = nn.BatchNorm2d(64, affine=affine_par)
@@ -305,11 +305,11 @@ class ResNet(nn.Module):
         return x
 
 
-class MS_Deeplab(nn.Module):
+class MS_Deeplab4(nn.Module):
     def __init__(self, block, num_classes):
-        super(MS_Deeplab, self).__init__()
-        self.Scale = ResNet(block, [3, 4, 23, 3],
-                            num_classes)  # changed to fix #4
+        super(MS_Deeplab4, self).__init__()
+        self.Scale = ResNet4(block, [3, 4, 23, 3],
+                             num_classes)  # changed to fix #4
 
     def forward(self, x):
         output = self.Scale(x)  # for original scale
@@ -333,14 +333,14 @@ class MS_Deeplab(nn.Module):
         return [output, output75, output5, out_max]
 
 
-def Res_Ms_Deeplab(num_classes=21):
-    model = MS_Deeplab(Bottleneck, num_classes)
+def Res_Ms_Deeplab4(num_classes=21):
+    model = MS_Deeplab4(Bottleneck, num_classes)
     return model
 
 
-def Res_Deeplab(num_classes=21, is_refine=False):
+def Res_Deeplab4(num_classes=21, is_refine=False):
     if is_refine:
-        model = ResNet_Refine(Bottleneck, [3, 4, 23, 3], num_classes)
+        model = ResNet4_Refine(Bottleneck, [3, 4, 23, 3], num_classes)
     else:
-        model = ResNet(Bottleneck, [3, 4, 23, 3], num_classes)
+        model = ResNet4(Bottleneck, [3, 4, 23, 3], num_classes)
     return model
