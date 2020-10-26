@@ -174,7 +174,10 @@ class ResNet_Refine(nn.Module):
             block, 256, layers[2], stride=1, dilation=2)
         self.layer4 = self._make_layer(
             block, 512, layers[3], stride=1, dilation=4)
-        self.layer5 = Residual_Refinement_Module(num_classes)
+        self.layer5a = Residual_Refinement_Module(num_classes)
+        self.layer5b = Residual_Refinement_Module(num_classes)
+        self.layer5c = Residual_Refinement_Module(num_classes)
+        self.layer5d = Residual_Refinement_Module(num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -213,7 +216,13 @@ class ResNet_Refine(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
-        x = self.layer5(x)
+
+        x = torch.stack([
+            self.layer5a(x),
+            self.layer5b(x),
+            self.layer5c(x),
+            self.layer5d(x),
+        ])
 
         return x
 
@@ -236,8 +245,14 @@ class ResNet(nn.Module):
             block, 256, layers[2], stride=1, dilation=2)
         self.layer4 = self._make_layer(
             block, 512, layers[3], stride=1, dilation=4)
-        self.layer5 = self._make_pred_layer(Classifier_Module, [6, 12, 18, 24], [
-                                            6, 12, 18, 24], num_classes)
+        self.layer5a = self._make_pred_layer(
+            Classifier_Module, [6, 12, 18, 24], [6, 12, 18, 24], num_classes)
+        self.layer5b = self._make_pred_layer(
+            Classifier_Module, [6, 12, 18, 24], [6, 12, 18, 24], num_classes)
+        self.layer5c = self._make_pred_layer(
+            Classifier_Module, [6, 12, 18, 24], [6, 12, 18, 24], num_classes)
+        self.layer5d = self._make_pred_layer(
+            Classifier_Module, [6, 12, 18, 24], [6, 12, 18, 24], num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -279,7 +294,13 @@ class ResNet(nn.Module):
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
-        x = self.layer5(x)
+
+        x = torch.stack([
+            self.layer5a(x),
+            self.layer5b(x),
+            self.layer5c(x),
+            self.layer5d(x),
+        ])
 
         return x
 
