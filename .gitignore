@@ -146,3 +146,4 @@ src_model
 # log files
 results
 cityscapes
+gta_src_train*
