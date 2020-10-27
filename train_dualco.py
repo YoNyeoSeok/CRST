@@ -1092,7 +1092,10 @@ def get_10x_lr_params(model):
     which does the classification of pixel into classes
     """
     b = []
-    b.append(model.layer5.parameters())
+    b.append(model.layer5a.parameters())
+    b.append(model.layer5b.parameters())
+    b.append(model.layer5c.parameters())
+    b.append(model.layer5d.parameters())
 
     for j in range(len(b)):
         for i in b[j]:
