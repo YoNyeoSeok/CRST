@@ -575,21 +575,24 @@ def train(mix_trainloader, model, device, interp, optimizer, tot_iter, round_idx
 
         optimizer.zero_grad()
         adjust_learning_rate(optimizer, i_iter, tot_iter)
-        pred = interp(model(images))
+        pred_abcd = list(map(interp, model(images)))
         if args.lr_weight_ent == 0.0:
-            loss = reg_loss_calc(pred, labels, reg_weights.to(device), args)
+            loss_abcd = list(map(
+                lambda pred: reg_loss_calc(pred, labels, reg_weights.to(device), args), pred_abcd))
         if args.lr_weight_ent > 0.0:
-            loss = reg_loss_calc_expand(
-                pred, labels, reg_weights.to(device), args)
+            loss_abcd = list(map(
+                lambda pred: reg_loss_calc_expand(pred, labels, reg_weights.to(device), args), pred_abcd))
+        loss = torch.stack(loss_abcd)[:2].mean()
         loss.backward()
         optimizer.step()
 
-        logger.info('iter = {} of {} completed, loss = {:.4f}'.format(
-            i_iter+1, tot_iter, loss.data.cpu().numpy()))
+        logger.info('iter = {} of {} completed, loss_a = {:.4f}, loss_b = {:.4f}, loss = {:.4f}'.format(
+            i_iter+1, tot_iter, loss_abcd[0].data.cpu().numpy(),
+            loss_abcd[1].data.cpu().numpy(), loss.data.cpu().numpy()))
 
     print('taking snapshot ...')
-    torch.save(model.state_dict(), osp.join(args.save, args.data_src +
-                                            '2city_round' + str(round_idx) + '_epoch' + str(epoch_idx+1) + '.pth'))
+    torch.save(model.state_dict(),
+               osp.join(args.save, args.data_src + '2city_round' + str(round_idx) + '_epoch' + str(epoch_idx+1) + '.pth'))
 
 
 def test(model, device, save_round_eval_path, round_idx, tgt_set, test_num, test_list, label_2_id, valid_labels, args, logger):
