@@ -1,4 +1,3 @@
-IMAGE=yonyeoseok/crst:devel
 NAME=crst
 CODEDIR=$HOME/research/CRST
 DATADIR=$HOME/data
