@@ -248,6 +248,20 @@ def colorize_mask(mask):
     return new_mask
 
 
+def get_weight_diff(model, norm, orth):
+    diff = 0
+    for m1, m2 in zip(model.layer5a.conv2d_list, model.layer5b.conv2d_list):
+        for (n1, w1), (n2, w2) in zip(m1.named_parameters(), m2.named_parameters()):
+            assert n1 == n2, "classifier not match"
+            if 'weight' in n1:
+                vec = w1 * w2
+                for dim in orth:
+                    vec = vec.sum(dim=dim, keepdim=True)
+                vec.squeeze_()
+                diff += vec.norm(norm).pow(norm)
+    return diff
+
+
 def main():
     randseed = args.randseed
     seed_torch(randseed)
@@ -582,13 +596,16 @@ def train(mix_trainloader, model, device, interp, optimizer, tot_iter, round_idx
         if args.lr_weight_ent > 0.0:
             loss_abcd = list(map(
                 lambda pred: reg_loss_calc_expand(pred, labels, reg_weights.to(device), args), pred_abcd))
-        loss = torch.stack(loss_abcd)[:2].mean()
+        loss_mean_ab = torch.stack(loss_abcd)[:2].mean()
+        weight_diff = get_weight_diff(model, norm=2, orth=[2, 3])
+        loss = loss_mean_ab + weight_diff
         loss.backward()
         optimizer.step()
 
-        logger.info('iter = {} of {} completed, loss_a = {:.4f}, loss_b = {:.4f}, loss = {:.4f}'.format(
+        logger.info('iter = {} of {} completed, loss_a = {:.4f}, loss_b = {:.4f}, loss_mean_ab = {:.4f}, weight_diff = {:.4f}, loss = {:.4f}'.format(
             i_iter+1, tot_iter, loss_abcd[0].data.cpu().numpy(),
-            loss_abcd[1].data.cpu().numpy(), loss.data.cpu().numpy()))
+            loss_abcd[1].data.cpu().numpy(), loss_mean_ab.data.cpu().numpy(),
+            weight_diff.data.cpu().numpy(), loss.data.cpu().numpy()))
 
     print('taking snapshot ...')
     torch.save(model.state_dict(),
