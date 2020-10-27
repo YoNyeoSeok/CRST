@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=0 python train_dualco.py --random-mirror --random-scale --test-flipping --save results/cbst --data-src-dir DATA_SRC_DIR --data-tgt-dir DATA_TGT_DIR
+CUDA_VISIBLE_DEVICES=0 python train_dualco.py --random-mirror --random-scale --test-flipping --save results/cbst_dualco --data-src-dir /home/crst/data/GTA5/ --data-tgt-dir /home/crst/data/Cityscapes/ --restore-from src_model/gta5/src_model_copy4.pth
