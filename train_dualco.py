@@ -628,9 +628,13 @@ def train(mix_trainloader, model, device, interp, optimizer, tot_iter, round_idx
 
 def test(model, device, save_round_eval_path, round_idx, tgt_set, test_num, test_list, label_2_id, valid_labels, args, logger):
     """Create the model and start the evaluation process."""
+    output_names = ['a', 'b', 'c', 'd']
     # scorer
-    scorer = ScoreUpdater(valid_labels, args.num_classes, test_num, logger)
-    scorer.reset()
+    scorer = {}
+    for output_name in output_names:
+        scorer[output_name] = ScoreUpdater(
+            valid_labels, args.num_classes, test_num, logger)
+        scorer[output_name].reset()
     h, w = map(int, args.test_image_size.split(','))
     test_image_size = (h, w)
     test_size = (h, w)
@@ -675,6 +679,9 @@ def test(model, device, save_round_eval_path, round_idx, tgt_set, test_num, test
         for index, batch in enumerate(testloader):
             image, label, _, name = batch
             img = image.clone()
+            label = label_2_id[np.asarray(label.numpy(), dtype=np.uint8)]
+            name = name[0].split('/')[-1]
+            image_name = name.split('.')[0]
             for scale_idx in range(num_scales):
                 if version.parse(torch.__version__) > version.parse('0.4.0'):
                     image = F.interpolate(
@@ -686,32 +693,38 @@ def test(model, device, save_round_eval_path, round_idx, tgt_set, test_num, test
                         size=test_size, mode='bilinear', align_corners=True)
                     image = interp_tmp(img)
                 if args.model == 'DeeplabRes4':
-                    output2 = model(image.to(device))
-                    coutput = interp(output2).cpu().data[0].numpy()
+                    scaled_output_abcd = torch.stack(list(map(
+                        interp, model(image.to(device))))).cpu().data[:, 0].numpy()
                 if args.test_flipping:
-                    output2 = model(torch.from_numpy(
-                        image.numpy()[:, :, :, ::-1].copy()).to(device))
-                    coutput = 0.5 * \
-                        (coutput +
-                         interp(output2).cpu().data[0].numpy()[:, :, ::-1])
+                    flipped_output_abcd = torch.stack(list(map(
+                        interp,
+                        model(torch.from_numpy(image.numpy()[..., ::-1].copy()).to(device))))
+                    ).cpu().data[:, 0].numpy()
+                    scaled_output_abcd = 0.5 * \
+                        (scaled_output_abcd + flipped_output_abcd[..., ::-1])
                 if scale_idx == 0:
-                    output = coutput.copy()
+                    output_abcd = scaled_output_abcd.copy()
                 else:
-                    output = output+coutput
-            output = output/num_scales
-            output = output.transpose(1, 2, 0)
-            amax_output = np.asarray(np.argmax(output, axis=2), dtype=np.uint8)
-            # score
-            pred_label = amax_output.copy()
-            label = label_2_id[np.asarray(label.numpy(), dtype=np.uint8)]
-            scorer.update(pred_label.flatten(), label.flatten(), index)
-            # save visualized seg maps & predication prob map
-            amax_output_col = colorize_mask(amax_output)
-            name = name[0].split('/')[-1]
-            image_name = name.split('.')[0]
-            # vis seg maps
-            amax_output_col.save('%s/%s_color.png' %
-                                 (save_test_vis_path, image_name))
+                    output_abcd = output_abcd + scaled_output_abcd
+            for output_name, output in zip(output_names, output_abcd):
+                save_test_vis_path_ = osp.join(save_test_vis_path, output_name)
+                if not os.path.exists(save_test_vis_path_):
+                    os.makedirs(save_test_vis_path_)
+
+                output = output/num_scales
+                output = output.transpose(1, 2, 0)
+                amax_output = np.asarray(
+                    np.argmax(output, axis=2), dtype=np.uint8)
+                # score
+                pred_label = amax_output.copy()
+                scorer[output_name].update(
+                    pred_label.flatten(), label.flatten(), index)
+                # save visualized seg maps & predication prob map
+                amax_output_col = colorize_mask(amax_output)
+                # vis seg maps
+                amax_output_col.save('%s/%s_color.png' %
+                                     (save_test_vis_path_, image_name))
+
 
     logger.info('###### Finish evaluating in target domain {} set in round {}! Time cost: {:.2f} seconds. ######'.format(
         tgt_set, round_idx, time.time()-start_eval))
