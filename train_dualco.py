@@ -688,29 +688,35 @@ def kc_parameters(conf_dict, pred_cls_num, tgt_portion, round_idx, save_stats_pa
     logger.info(
         '###### Start kc generation in round {} ! ######'.format(round_idx))
     start_kc = time.time()
+    output_names = ['a', 'b', 'c', 'd']
     # threshold for each class
     conf_tot = 0.0
-    cls_thresh = np.ones(args.num_classes, dtype=np.float32)
-    cls_sel_size = np.zeros(args.num_classes, dtype=np.float32)
-    cls_size = np.zeros(args.num_classes, dtype=np.float32)
+    cls_thresh = np.ones(
+        (len(output_names), args.num_classes), dtype=np.float32)
+    cls_sel_size = np.zeros(
+        (len(output_names), args.num_classes), dtype=np.float32)
+    cls_size = np.zeros(
+        (len(output_names), args.num_classes), dtype=np.float32)
     if args.kc_policy == 'cb' and args.kc_value == 'conf':
-        for idx_cls in np.arange(0, args.num_classes):
-            cls_size[idx_cls] = pred_cls_num[idx_cls]
-            if conf_dict[idx_cls] != None:
-                # sort in descending order
-                conf_dict[idx_cls].sort(reverse=True)
-                len_cls = len(conf_dict[idx_cls])
-                cls_sel_size[idx_cls] = int(math.floor(len_cls * tgt_portion))
-                len_cls_thresh = int(cls_sel_size[idx_cls])
-                if len_cls_thresh != 0:
-                    cls_thresh[idx_cls] = conf_dict[idx_cls][len_cls_thresh-1]
-                conf_dict[idx_cls] = None
+        for idx_output, output_name in enumerate(output_names):
+            for idx_cls in np.arange(0, args.num_classes):
+                cls_size[idx_output][idx_cls] = pred_cls_num[output_name][idx_cls]
+                if conf_dict[output_name][idx_cls] != None:
+                    # sort in descending order
+                    conf_dict[output_name][idx_cls].sort(reverse=True)
+                    len_cls = len(conf_dict[output_name][idx_cls])
+                    cls_sel_size[idx_output][idx_cls] = int(
+                        math.floor(len_cls * tgt_portion))
+                    len_cls_thresh = int(cls_sel_size[idx_output][idx_cls])
+                    if len_cls_thresh != 0:
+                        cls_thresh[idx_output][idx_cls] = conf_dict[output_name][idx_cls][len_cls_thresh-1]
+                    conf_dict[output_name][idx_cls] = None
 
     # threshold for mine_id with priority
     num_mine_id = len(np.nonzero(
-        cls_size / np.sum(cls_size) < args.mine_port)[0])
+        cls_size.sum(0) / np.sum(cls_size) < args.mine_port)[0])
     # chose the smallest mine_id
-    id_all = np.argsort(cls_size / np.sum(cls_size))
+    id_all = np.argsort(cls_size.sum(0) / np.sum(cls_size))
     rare_id = id_all[:args.rare_cls_num]
     # sort mine_id in ascending order w.r.t predication portions
     mine_id = id_all[:num_mine_id]
