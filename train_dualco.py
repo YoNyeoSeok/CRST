@@ -431,9 +431,13 @@ def main():
 
 def val(model, device, save_round_eval_path, round_idx, tgt_num, label_2_id, valid_labels, args, logger):
     """Create the model and start the evaluation process."""
+    output_names = ['a', 'b', 'c', 'd']
     # scorer
-    scorer = ScoreUpdater(valid_labels, args.num_classes, tgt_num, logger)
-    scorer.reset()
+    scorer = {}
+    for output_name in output_names:
+        scorer[output_name] = ScoreUpdater(
+            valid_labels, args.num_classes, tgt_num, logger)
+        scorer[output_name].reset()
     h, w = map(int, args.test_image_size.split(','))
     test_image_size = (h, w)
     test_size = (int(h*args.eval_scale), int(w*args.eval_scale))
@@ -472,8 +476,11 @@ def val(model, device, save_round_eval_path, round_idx, tgt_num, label_2_id, val
         os.makedirs(save_pred_path)
 
     # saving output data
-    conf_dict = {k: [] for k in range(args.num_classes)}
-    pred_cls_num = np.zeros(args.num_classes)
+    conf_dict = {}
+    pred_cls_num = {}
+    for output_name in output_names:
+        conf_dict[output_name] = {k: [] for k in range(args.num_classes)}
+        pred_cls_num[output_name] = np.zeros(args.num_classes)
     # evaluation process
     logger.info(
         '###### Start evaluating target domain train set in round {}! ######'.format(round_idx))
@@ -481,59 +488,77 @@ def val(model, device, save_round_eval_path, round_idx, tgt_num, label_2_id, val
     with torch.no_grad():
         for index, batch in enumerate(testloader):
             image, label, _, name = batch
-            if args.model == 'DeeplabRes4':
-                output2 = model(image.to(device))
-                output = softmax2d(interp(output2)).cpu().data[0].numpy()
-            if args.test_flipping:
-                output2 = model(torch.from_numpy(
-                    image.numpy()[:, :, :, ::-1].copy()).to(device))
-                output = 0.5 * (output + softmax2d(interp(output2)
-                                                   ).cpu().data[0].numpy()[:, :, ::-1])
-            output = output.transpose(1, 2, 0)
-            amax_output = np.asarray(np.argmax(output, axis=2), dtype=np.uint8)
-            conf = np.amax(output, axis=2)
-            # score
-            pred_label = amax_output.copy()
-            label = label_2_id[np.asarray(label.numpy(), dtype=np.uint8)]
-            scorer.update(pred_label.flatten(), label.flatten(), index)
-
-            # save visualized seg maps & predication prob map
-            amax_output_col = colorize_mask(amax_output)
             name = name[0].split('/')[-1]
             image_name = name.split('.')[0]
-            # prob
-            np.save('%s/%s.npy' % (save_prob_path, image_name), output)
-            # trainIDs/vis seg maps
-            amax_output = Image.fromarray(amax_output)
-            amax_output.save('%s/%s.png' % (save_pred_path, image_name))
-            amax_output_col.save('%s/%s_color.png' %
-                                 (save_pred_vis_path, image_name))
+            label = label_2_id[np.asarray(label.numpy(), dtype=np.uint8)]
+            if args.model == 'DeeplabRes4':
+                output_abcd = torch.stack(list(map(
+                    interp, model(image.to(device)))))
+                prob_abcd = torch.stack(list(map(
+                    softmax2d, output_abcd))).cpu().data[:, 0].numpy()
+            if args.test_flipping:
+                flipped_output_abcd = torch.stack(list(map(
+                    interp,
+                    model(torch.from_numpy(image.numpy()[..., ::-1].copy()).to(device)))))
+                flipped_prob_abcd = torch.stack(list(map(
+                    softmax2d, flipped_output_abcd))).cpu().data[:, 0].numpy()
+                prob_abcd = 0.5 * \
+                    (prob_abcd + flipped_prob_abcd[..., ::-1])
+            for output_name, output in zip(output_names, prob_abcd):
+                save_pred_vis_path_ = osp.join(save_pred_vis_path, output_name)
+                save_prob_path_ = osp.join(save_prob_path, output_name)
+                save_pred_path_ = osp.join(save_pred_path, output_name)
+                if not os.path.exists(save_pred_vis_path_):
+                    os.makedirs(save_pred_vis_path_)
+                if not os.path.exists(save_prob_path_):
+                    os.makedirs(save_prob_path_)
+                if not os.path.exists(save_pred_path_):
+                    os.makedirs(save_pred_path_)
 
-            # save class-wise confidence maps
-            if args.kc_value == 'conf':
-                for idx_cls in range(args.num_classes):
-                    idx_temp = pred_label == idx_cls
-                    pred_cls_num[idx_cls] = pred_cls_num[idx_cls] + \
-                        np.sum(idx_temp)
-                    if idx_temp.any():
-                        conf_cls_temp = conf[idx_temp].astype(np.float32)
-                        len_cls_temp = conf_cls_temp.size
+                output = output.transpose(1, 2, 0)
+                amax_output = np.asarray(
+                    np.argmax(output, axis=2), dtype=np.uint8)
+                conf = np.amax(output, axis=2)
+                # score
+                pred_label = amax_output.copy()
+                scorer[output_name].update(
+                    pred_label.flatten(), label.flatten(), index)
+
+                # save visualized seg maps & predication prob map
+                amax_output_col = colorize_mask(amax_output)
+                # prob
+                np.save('%s/%s.npy' % (save_prob_path_, image_name), output)
+                # trainIDs/vis seg maps
+                amax_output = Image.fromarray(amax_output)
+                amax_output.save('%s/%s.png' % (save_pred_path_, image_name))
+                amax_output_col.save('%s/%s_color.png' %
+                                     (save_pred_vis_path_, image_name))
+
+                # save class-wise confidence maps
+                if args.kc_value == 'conf':
+                    for idx_cls in range(args.num_classes):
+                        idx_temp = pred_label == idx_cls
+                        pred_cls_num[output_name][idx_cls] = pred_cls_num[output_name][idx_cls] + \
+                            np.sum(idx_temp)
+                        if idx_temp.any():
+                            conf_cls_temp = conf[idx_temp].astype(np.float32)
+                            len_cls_temp = conf_cls_temp.size
+                            # downsampling by ds_rate
+                            conf_cls = conf_cls_temp[0:len_cls_temp:args.ds_rate]
+                            conf_dict[output_name][idx_cls].extend(conf_cls)
+                elif args.kc_value == 'prob':
+                    for idx_cls in range(args.num_classes):
+                        idx_temp = pred_label == idx_cls
+                        pred_cls_num[output_name][idx_cls] = pred_cls_num[output_name][idx_cls] + \
+                            np.sum(idx_temp)
+                        # prob slice
+                        prob_cls_temp = output[:, :, idx_cls].astype(
+                            np.float32).ravel()
+                        len_cls_temp = prob_cls_temp.size
                         # downsampling by ds_rate
-                        conf_cls = conf_cls_temp[0:len_cls_temp:args.ds_rate]
-                        conf_dict[idx_cls].extend(conf_cls)
-            elif args.kc_value == 'prob':
-                for idx_cls in range(args.num_classes):
-                    idx_temp = pred_label == idx_cls
-                    pred_cls_num[idx_cls] = pred_cls_num[idx_cls] + \
-                        np.sum(idx_temp)
-                    # prob slice
-                    prob_cls_temp = output[:, :, idx_cls].astype(
-                        np.float32).ravel()
-                    len_cls_temp = prob_cls_temp.size
-                    # downsampling by ds_rate
-                    prob_cls = prob_cls_temp[0:len_cls_temp:args.ds_rate]
-                    # it should be prob_dict; but for unification, use conf_dict
-                    conf_dict[idx_cls].extend(prob_cls)
+                        prob_cls = prob_cls_temp[0:len_cls_temp:args.ds_rate]
+                        # it should be prob_dict; but for unification, use conf_dict
+                        conf_dict[output_name][idx_cls].extend(prob_cls)
     logger.info('###### Finish evaluating target domain train set in round {}! Time cost: {:.2f} seconds. ######'.format(
         round_idx, time.time()-start_eval))
 
