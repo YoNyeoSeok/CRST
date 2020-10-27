@@ -26,7 +26,7 @@ import numpy as np
 import shutil
 import random
 
-from deeplab.model import Res_Deeplab
+from deeplab.model_dualco import Res_Deeplab4
 from deeplab.datasets import GTA5TestDataSet
 from deeplab.datasets import SrcSTDataSet, GTA5StMineDataSet, SoftSrcSTDataSet, SoftGTA5StMineDataSet
 
@@ -51,7 +51,7 @@ IGNORE_LABEL = 255
 TRAIN_SCALE_SRC = '0.5,1.5'
 TRAIN_SCALE_TGT = '0.5,1.5'
 # model
-MODEL = 'DeeplabRes'
+MODEL = 'DeeplabRes4'
 # gpu
 GPU = 0
 PIN_MEMORY = False
@@ -269,8 +269,8 @@ def main():
     logger = util.set_logger(args.save, args.log_file, args.debug)
     logger.info('start with arguments %s', args)
 
-    if args.model == 'DeeplabRes':
-        model = Res_Deeplab(num_classes=args.num_classes)
+    if args.model == 'DeeplabRes4':
+        model = Res_Deeplab4(num_classes=args.num_classes)
 
     if args.restore_from[:4] == 'http':
         saved_state_dict = model_zoo.load_url(args.restore_from)
@@ -481,7 +481,7 @@ def val(model, device, save_round_eval_path, round_idx, tgt_num, label_2_id, val
     with torch.no_grad():
         for index, batch in enumerate(testloader):
             image, label, _, name = batch
-            if args.model == 'DeeplabRes':
+            if args.model == 'DeeplabRes4':
                 output2 = model(image.to(device))
                 output = softmax2d(interp(output2)).cpu().data[0].numpy()
             if args.test_flipping:
@@ -626,7 +626,7 @@ def test(model, device, save_round_eval_path, round_idx, tgt_set, test_num, test
                     interp_tmp = nn.Upsample(
                         size=test_size, mode='bilinear', align_corners=True)
                     image = interp_tmp(img)
-                if args.model == 'DeeplabRes':
+                if args.model == 'DeeplabRes4':
                     output2 = model(image.to(device))
                     coutput = interp(output2).cpu().data[0].numpy()
                 if args.test_flipping:
