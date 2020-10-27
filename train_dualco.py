@@ -741,73 +741,91 @@ def label_selection(cls_thresh, tgt_num, image_name_tgt_list, id_2_label, round_
     logger.info(
         '###### Start pseudo-label generation in round {} ! ######'.format(round_idx))
     start_pl = time.time()
+    output_names = ['a', 'b', 'c', 'd']
     for idx in range(tgt_num):
-        sample_name = image_name_tgt_list[idx].split('.')[0]
-        probmap_path = osp.join(save_prob_path, '{}.npy'.format(sample_name))
-        pred_path = osp.join(save_pred_path, '{}.png'.format(sample_name))
-        pred_prob = np.load(probmap_path)
-        pred_label_trainIDs = np.asarray(Image.open(pred_path))
-        pred_label_labelIDs = id_2_label[pred_label_trainIDs]
-        pred_label_trainIDs = pred_label_trainIDs.copy()
-        if args.kc_policy == 'cb' and args.lr_weight_ent == 0.0:
-            save_wpred_vis_path = osp.join(
-                save_round_eval_path, 'weighted_pred_vis')
-            if not os.path.exists(save_wpred_vis_path):
-                os.makedirs(save_wpred_vis_path)
-            weighted_prob = pred_prob/cls_thresh
-            weighted_pred_trainIDs = np.asarray(
-                np.argmax(weighted_prob, axis=2), dtype=np.uint8)
-            # save weighted predication
-            wpred_label_col = weighted_pred_trainIDs.copy()
-            wpred_label_col = colorize_mask(wpred_label_col)
-            wpred_label_col.save('%s/%s_color.png' %
-                                 (save_wpred_vis_path, sample_name))
-            weighted_conf = np.amax(weighted_prob, axis=2)
-            pred_label_trainIDs = weighted_pred_trainIDs.copy()
-            pred_label_labelIDs = id_2_label[pred_label_trainIDs]
-            # '0' in cityscapes indicates 'unlabaled' for labelIDs
-            pred_label_labelIDs[weighted_conf < 1] = 0
-            # '255' in cityscapes indicates 'unlabaled' for trainIDs
-            pred_label_trainIDs[weighted_conf < 1] = 255
-        # check if cb can be combined with kc_value == conf or prob; also check if \alpha can be larger than 1
-        elif args.kc_policy == 'cb' and args.lr_weight_ent > 0.0:
-            save_wpred_vis_path = osp.join(
-                save_round_eval_path, 'weighted_pred_vis')
-            if not os.path.exists(save_wpred_vis_path):
-                os.makedirs(save_wpred_vis_path)
-            # soft pseudo-label
-            # weighted softmax with temperature
-            soft_pseudo_label = np.power(
-                pred_prob/cls_thresh, 1.0/args.lr_weight_ent)
-            soft_pseudo_label_sum = soft_pseudo_label.sum(2)
-            soft_pseudo_label = soft_pseudo_label.transpose(
-                2, 0, 1)/soft_pseudo_label_sum
-            soft_pseudo_label = soft_pseudo_label.transpose(
-                1, 2, 0).astype(np.float32)
-            np.save('%s/%s.npy' %
-                    (save_pseudo_label_path, sample_name), soft_pseudo_label)
-            # hard pseudo-label
-            weighted_pred_trainIDs = np.asarray(
-                np.argmax(soft_pseudo_label, axis=2), dtype=np.uint8)
-            reg_score = np.sum(-soft_pseudo_label*np.log(pred_prob+1e-32) +
-                               args.lr_weight_ent*soft_pseudo_label*np.log(soft_pseudo_label+1e-32), axis=2)
-            sel_score = np.sum(-soft_pseudo_label *
-                               np.log(cls_thresh+1e-32), axis=2)
-            # save weighted predication
-            wpred_label_col = weighted_pred_trainIDs.copy()
-            wpred_label_col = colorize_mask(wpred_label_col)
-            wpred_label_col.save('%s/%s_color.png' %
-                                 (save_wpred_vis_path, sample_name))
-            pred_label_trainIDs = weighted_pred_trainIDs.copy()
-            pred_label_labelIDs = id_2_label[pred_label_trainIDs]
-            # '0' in cityscapes indicates 'unlabaled' for labelIDs
-            pred_label_labelIDs[reg_score >= sel_score] = 0
-            # '255' in cityscapes indicates 'unlabaled' for trainIDs
-            pred_label_trainIDs[reg_score >= sel_score] = 255
+        pred_prob_abcd = []
+        pred_label_trainIDs = {}
+        pred_label_labelIDs = {}
+        for idx_output, output_name in enumerate(output_names):
+            sample_name = image_name_tgt_list[idx].split('.')[0]
+            probmap_path = osp.join(
+                save_prob_path, output_name, '{}.npy'.format(sample_name))
+            pred_path = osp.join(save_pred_path, output_name,
+                                 '{}.png'.format(sample_name))
+            pred_prob = np.load(probmap_path)
+
+            pred_label_trainIDs[output_name] = \
+                np.asarray(Image.open(pred_path))
+            pred_label_labelIDs[output_name] = id_2_label[pred_label_trainIDs[output_name]]
+            pred_label_trainIDs[output_name] = \
+                pred_label_trainIDs[output_name].copy()
+            if args.kc_policy == 'cb' and args.lr_weight_ent == 0.0:
+                save_wpred_vis_path = osp.join(
+                    save_round_eval_path, 'weighted_pred_vis', output_name)
+                if not os.path.exists(save_wpred_vis_path):
+                    os.makedirs(save_wpred_vis_path)
+                weighted_prob = pred_prob/cls_thresh[idx_output]
+                weighted_pred_trainIDs = np.asarray(
+                    np.argmax(weighted_prob, axis=2), dtype=np.uint8)
+                # save weighted predication
+                wpred_label_col = weighted_pred_trainIDs.copy()
+                wpred_label_col = colorize_mask(wpred_label_col)
+                wpred_label_col.save('%s/%s_color.png' %
+                                     (save_wpred_vis_path, sample_name))
+                weighted_conf = np.amax(weighted_prob, axis=2)
+                pred_label_trainIDs[output_name] = \
+                    weighted_pred_trainIDs.copy()
+                pred_label_labelIDs[output_name] = id_2_label[pred_label_trainIDs[output_name]]
+                # '0' in cityscapes indicates 'unlabaled' for labelIDs
+                pred_label_labelIDs[output_name][weighted_conf < 1] = 0
+                # '255' in cityscapes indicates 'unlabaled' for trainIDs
+                pred_label_trainIDs[output_name][weighted_conf < 1] = 255
+            # check if cb can be combined with kc_value == conf or prob; also check if \alpha can be larger than 1
+            elif args.kc_policy == 'cb' and args.lr_weight_ent > 0.0:
+                save_wpred_vis_path = osp.join(
+                    save_round_eval_path, 'weighted_pred_vis', output_name)
+                if not os.path.exists(save_wpred_vis_path):
+                    os.makedirs(save_wpred_vis_path)
+                # soft pseudo-label
+                # weighted softmax with temperature
+                soft_pseudo_label = np.power(
+                    pred_prob/cls_thresh[idx_output], 1.0/args.lr_weight_ent)
+                soft_pseudo_label_sum = soft_pseudo_label.sum(2)
+                soft_pseudo_label = soft_pseudo_label.transpose(
+                    2, 0, 1)/soft_pseudo_label_sum
+                soft_pseudo_label = soft_pseudo_label.transpose(
+                    1, 2, 0).astype(np.float32)
+                np.save('%s/%s.npy' %
+                        (save_pseudo_label_path, sample_name), soft_pseudo_label)
+                # hard pseudo-label
+                weighted_pred_trainIDs = np.asarray(
+                    np.argmax(soft_pseudo_label, axis=2), dtype=np.uint8)
+                reg_score = np.sum(-soft_pseudo_label*np.log(pred_prob+1e-32) +
+                                   args.lr_weight_ent*soft_pseudo_label*np.log(soft_pseudo_label+1e-32), axis=2)
+                sel_score = np.sum(-soft_pseudo_label *
+                                   np.log(cls_thresh[idx_output]+1e-32), axis=2)
+                # save weighted predication
+                wpred_label_col = weighted_pred_trainIDs.copy()
+                wpred_label_col = colorize_mask(wpred_label_col)
+                wpred_label_col.save('%s/%s_color.png' %
+                                     (save_wpred_vis_path, sample_name))
+                pred_label_trainIDs[output_name] = \
+                    weighted_pred_trainIDs.copy()
+                pred_label_labelIDs[output_name] = id_2_label[pred_label_trainIDs[output_name]]
+                # '0' in cityscapes indicates 'unlabaled' for labelIDs
+                pred_label_labelIDs[output_name][reg_score >= sel_score] = 0
+                # '255' in cityscapes indicates 'unlabaled' for trainIDs
+                pred_label_trainIDs[output_name][reg_score >= sel_score] = 255
 
         # pseudo-labels with labelID
-        pseudo_label_labelIDs = pred_label_labelIDs.copy()
-        pseudo_label_trainIDs = pred_label_trainIDs.copy()
+        pseudo_label_policy = 'a_and_b'
+        if pseudo_label_policy == 'a_and_b':
+            pseudo_label_labelIDs = pred_label_labelIDs['a'].copy()
+            pseudo_label_labelIDs[
+                pred_label_labelIDs['a'] != pred_label_labelIDs['b']] = 0
+            pseudo_label_trainIDs = pred_label_trainIDs['a'].copy()
+            pseudo_label_trainIDs[
+                pred_label_trainIDs['a'] != pred_label_trainIDs['b']] = 255
         # save colored pseudo-label map
         pseudo_label_col = colorize_mask(pseudo_label_trainIDs)
         pseudo_label_col.save('%s/%s_color.png' %
