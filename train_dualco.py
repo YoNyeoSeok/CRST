@@ -57,6 +57,10 @@ GPU = 0
 PIN_MEMORY = False
 # log files
 LOG_FILE = 'self_training_log'
+# weight diff
+WEIGHT_DIFF_LAMBDA = 1.0
+WEIGHT_DIFF_NORM = 2
+WEIGHT_DIFF_ORTH = [2, 3]
 
 ### train ###
 BATCH_SIZE = 2
@@ -144,6 +148,15 @@ def get_arguments():
                         help="The name of log file.")
     parser.add_argument('--debug', help='True means logging debug info.',
                         default=False, action='store_true')
+    # weight diff
+    parser.add_argument('--wd_lambda', type=float, default=WEIGHT_DIFF_LAMBDA,
+                        help="weight difference lambda for loss.")
+    parser.add_argument('--wd_norm', type=int, default=WEIGHT_DIFF_NORM, choices=[1, 2],
+                        help="norm for weight difference.")
+    parser.add_argument('--wd_orth', type=int, nargs='*', default=WEIGHT_DIFF_ORTH, choices=[1, 2, 3],
+                        help="orthogonal dimension for weight difference."
+                             "[] for none, [1] for channel, [2, 3] for kernel, [1, 2, 3] for whole feature")
+
     ### train ###
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE,
                         help="Number of images sent to the network in one step.")
@@ -597,8 +610,9 @@ def train(mix_trainloader, model, device, interp, optimizer, tot_iter, round_idx
             loss_abcd = list(map(
                 lambda pred: reg_loss_calc_expand(pred, labels, reg_weights.to(device), args), pred_abcd))
         loss_mean_ab = torch.stack(loss_abcd)[:2].mean()
-        weight_diff = get_weight_diff(model, norm=2, orth=[2, 3])
-        loss = loss_mean_ab + weight_diff
+        weight_diff = get_weight_diff(
+            model, norm=args.wd_norm, orth=args.wd_orth)
+        loss = loss_mean_ab + args.wd_lambda * weight_diff
         loss.backward()
         optimizer.step()
 
